@@ -50,100 +50,80 @@ fn floor_division(nbr: &i32, dial_size: &i32) -> i32{
     nbr.div_euclid(dial_size + 1)
 }
 
-pub fn part_a_old(input: &PathBuf, dial_size: &i32, starting_point: i32) -> anyhow::Result<i32> {
+
+fn radians(x: &f64, period: &f64) -> f64{
+    x * period
+}
+fn sin(x: &f64, period: &f64) -> f64{
+
+    (radians(x, period)).sin()
+}
+
+fn cos(x: &f64, period: &f64) -> f64{
+
+    (radians(x, period)).cos()
+}
+
+
+
+
+pub fn part_a(input: &PathBuf, dial_size: &i32, starting_point: i32) -> anyhow::Result<i32> {
+    // Let's try this again mapping to cos. That way we don't have to worry about odd pis.
+
+    let period: f64 = 2. * std::f64::consts::PI / (* dial_size as f64 + 1.);
+    let machine_error: f64 = 4. * f64::EPSILON ; // error from the sin function
+    // Read the list of numbers from the input file
+    let combo_list = read_number(input)?;
+
+    // Starting from 50, we track around the circle
+    let partial_sum: Vec<i32> = combo_list.iter().scan(
+        starting_point, |acc, &x| {
+            *acc += x;
+            Some(*acc)
+        }
+    ).collect();
+
+    // Project onto the circle
+    let cos_x: Vec<f64> = partial_sum.iter().map(
+        |x| cos(
+            &(*x as f64), &period
+        )
+    ).collect();
+
+
+    let zero_count: i32 = cos_x.iter().filter(
+        |&x| &(x - 1.).abs() <= &machine_error).count() as i32;
+
+    Ok(zero_count)
+}
+
+pub fn part_b(input: &PathBuf, dial_size: &i32, starting_point: i32) -> anyhow::Result<i32> {
+
     // Read the list of numbers from the input file
     let mut combo_list = read_number(input)?;
-    // insert starting point
     combo_list.insert(0, starting_point);
 
-    // Take the partial sums up each element in the array
+    // Starting from 50, we track around the circle
     let partial_sum: Vec<i32> = combo_list.iter().scan(
         0, |acc, &x| {
             *acc += x;
             Some(*acc)
         }
     ).collect();
-    let mod_sum: Vec<i32> = partial_sum.iter().map(|x| mod_the_password(x, dial_size)).collect();
-    // count the 0s in partial_sum
-    let zero_count: i32 = mod_sum.iter().filter(|&x| x == &0).count() as i32;
-    Ok(zero_count)
 
-}
-
-
-pub fn part_a(input: &PathBuf, dial_size: &i32, starting_point: i32) -> anyhow::Result<i32> {
-    // Read the list of numbers from the input file
-    let combo_list = read_number(input)?;
-
-    let mut current_value: i32 = starting_point;
-    let mut next_value: i32;
+    // look at the interval [x0, x1) for each pair in the partial sum map.
+    // Again, using cosine so that the function is symmetric, we pass 0 everytime we go a
+    // half period. The number of half periods on the interval [x0, x1) is
+    // n = (x1 - x0 - 1) / P
     let mut zero_count: i32 = 0;
-    let mut modulo_value;
-    // let's try like this going around the dial
-    for x in combo_list.iter(){
-        next_value = current_value + x;
-        // the modulo value gives us the current dial position
-        modulo_value = mod_the_password(&next_value, dial_size);
-
-        // This is the part-A solution
-        if modulo_value == 0 {zero_count += 1}
-
-        println!("After applying rotation {} we are at {} with our total zero count is now {}", x, modulo_value, zero_count);
-        current_value = modulo_value;
-
+    for window in partial_sum.windows(2) {
+        let start: f32 = window[0] as f32;
+        let end: f32 = (window[0] - 1) as f32;
     }
-
     Ok(zero_count)
-
 }
 
-pub fn part_b(input: &PathBuf, dial_size: &i32, starting_point: i32) -> anyhow::Result<i32> {
-    // Read the list of numbers from the input file
-    let combo_list = read_number(input)?;
 
-    let mut current_value: i32 = starting_point;
-    let mut next_value: i32;
-    let mut zero_count: i32 = 0;
-    let mut nbr_rotations: i32;
-    let mut modulo_value;
-    let mut previous_value: i32;
-    // let's try like this going around the dial
-    for x in combo_list.iter(){
-        previous_value = current_value;
-        next_value = current_value + x;
-        // the modulo value gives us the current dial position
-        modulo_value = mod_the_password(&next_value, dial_size);
-        // we also need to calculate how many times we went around
-        // if we passed zero.
-        // we pass zero if next_value < 0 or next_value > 99
-        // also make sure we don't count when we click over off a previous 0
-        if next_value <= 0 || next_value >= *dial_size {
-            nbr_rotations = floor_division(&next_value, dial_size).abs();
-            // here we account for that 100 // 100 = 1, but we are not passing zero.
-            // we are sitting on it
-            if modulo_value == 0 {nbr_rotations -= 1}
-            // also if we are already at zero we need to make sure that we don't count that
-            if previous_value == 0 {nbr_rotations -= 1}
-            // validate that we are never removing rotations
-            if nbr_rotations < 0 {println!("rotations < 0"); nbr_rotations = 0;}
-
-        }
-        else{
-            nbr_rotations = 0
-        }
-        // This is the part-A solution
-        if modulo_value == 0 {zero_count += 1}
-        // For part B we also add in the rotations through the point
-        zero_count += nbr_rotations;
-
-        println!("After applying rotation {} we are at {} with our total zero count is now {}", x, modulo_value, zero_count);
-        current_value = modulo_value;
-
-    }
-
-    Ok(zero_count)
-
-}
 
 
 
@@ -161,7 +141,7 @@ mod tests{
     }
 
     #[test]
-    fn test_part_a() {
+    fn test_part_a_sample() {
         // Arrange
         let input_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("input")
@@ -176,6 +156,24 @@ mod tests{
 
         // Assert
         assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn test_part_a() {
+        // Arrange
+        let input_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("input")
+            .join("day01.txt");
+        let dial_size = &99;
+        let starting_point = 50;
+
+        // Act
+        let result = part_a(
+            &input_path, dial_size, starting_point
+        ).expect("part_a failed"); // Extract the `i32`
+
+        // Assert
+        assert_eq!(result, 1118);
     }
 
     #[test]
